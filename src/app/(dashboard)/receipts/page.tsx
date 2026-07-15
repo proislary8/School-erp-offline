@@ -164,7 +164,7 @@ export default function ReceiptsPage() {
     setLoading(true)
     let q = supabase
       .from('payment_transactions')
-      .select('*, students(full_name, class_grade, student_id), fee_structures(name), user_profiles:created_by(full_name)')
+      .select('*, students(full_name, class_grade, student_id), fee_structures(name)')
       .not('amount_paid', 'is', null)
       .gt('amount_paid', 0)
       .order('receipt_no', { ascending: false })
