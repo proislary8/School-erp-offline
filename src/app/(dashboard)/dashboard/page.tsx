@@ -106,17 +106,7 @@ export default async function DashboardPage() {
           { href: '/reports', label: 'Reports', desc: 'Generate reports' },
           { href: '/receipts', label: 'Receipts', desc: 'Print / reprint' },
         ].map(q => (
-          <Link key={q.href} href={q.href} style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: '14px 16px',
-            textDecoration: 'none',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            transition: 'border-color 0.15s, background 0.15s',
-          }}
-          onMouseEnter={e => {(e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}}
-          onMouseLeave={e => {(e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}}
+          <Link key={q.href} href={q.href} className="quick-link-card"
           >
             <div>
               <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{q.label}</div>

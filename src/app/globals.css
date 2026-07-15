@@ -488,3 +488,21 @@ h1, h2, h3, h4, h5 {
 .row-pending  { background: rgba(245,158,11,0.04) !important; }
 .row-overdue  { background: rgba(239,68,68,0.06) !important; }
 .row-partial  { background: rgba(249,115,22,0.04) !important; }
+
+/* Dashboard quick link cards */
+.quick-link-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  text-decoration: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.quick-link-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
