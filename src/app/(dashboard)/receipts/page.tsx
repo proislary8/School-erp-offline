@@ -1,30 +1,151 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Receipt, Search, X, Printer, Download } from 'lucide-react'
-import dynamic from 'next/dynamic'
-import type { ReceiptData } from '@/components/receipts/ReceiptPDF'
-
-// @react-pdf/renderer must be loaded client-side only
-const PDFDownloadButton = dynamic(
-  () => import('@/components/receipts/PDFDownloadButton'),
-  { ssr: false, loading: () => <button className="btn btn-secondary btn-sm" disabled>PDF…</button> }
-)
+import { Receipt, Search, X, Printer } from 'lucide-react'
 
 function formatCurrency(n: number) { return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }) }
 
+interface ReceiptData {
+  receipt_no: number
+  student_name: string
+  student_id: string
+  class_grade: string
+  section_type: string
+  fee_head: string
+  amount_due: number
+  amount_paid: number
+  late_fee: number
+  payment_date: string | null
+  payment_mode: string | null
+  cheque_no: string | null
+  utr_ref: string | null
+  staff_name: string
+  school_name: string
+  receipt_prefix: string
+}
+
+function PrintReceipt({ data, onClose }: { data: ReceiptData; onClose: () => void }) {
+  const balance = Math.max(0, data.amount_due - data.amount_paid)
+  const generated = new Date().toLocaleString('en-IN')
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {/* Screen-only controls */}
+      <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 10 }} className="no-print">
+        <button className="btn btn-primary" onClick={() => window.print()}>
+          <Printer size={15} /> Print / Save PDF
+        </button>
+        <button className="btn btn-secondary" onClick={onClose}><X size={15} /> Close</button>
+      </div>
+
+      {/* Receipt card */}
+      <div id="print-receipt" style={{
+        background: '#fff', color: '#1a1a1a',
+        width: 360, padding: '24px 28px',
+        fontFamily: 'Arial, sans-serif', fontSize: 13,
+        borderRadius: 8,
+      }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', borderBottom: '2px solid #1a1a1a', paddingBottom: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{data.school_name}</div>
+          <div style={{ fontSize: 12, color: '#555', marginTop: 3, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Fee Payment Receipt
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'right', fontSize: 12, color: '#555', marginBottom: 12 }}>
+          Receipt No: <strong>{data.receipt_prefix}-{data.receipt_no}</strong>
+        </div>
+
+        {/* Student */}
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
+          Student Details
+        </div>
+        {[
+          ['Student Name', data.student_name],
+          ['Student ID', data.student_id],
+          ['Class', `Class ${data.class_grade}`],
+          ['Section', data.section_type],
+        ].map(([l, v]) => (
+          <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px dashed #ddd', fontSize: 12 }}>
+            <span style={{ color: '#555' }}>{l}</span>
+            <span style={{ fontWeight: 500, textTransform: 'capitalize' }}>{v}</span>
+          </div>
+        ))}
+
+        {/* Payment */}
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 14, marginBottom: 6 }}>
+          Payment Details
+        </div>
+        {[
+          ['Fee Head', data.fee_head],
+          ['Payment Date', data.payment_date ? new Date(data.payment_date).toLocaleDateString('en-IN') : '—'],
+          ['Payment Mode', data.payment_mode ?? '—'],
+          ...(data.cheque_no ? [['Cheque No.', data.cheque_no]] : []),
+          ...(data.utr_ref ? [['UTR / Ref', data.utr_ref]] : []),
+          ['Amount Due', formatCurrency(data.amount_due)],
+        ].map(([l, v]) => (
+          <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px dashed #ddd', fontSize: 12 }}>
+            <span style={{ color: '#555' }}>{l}</span>
+            <span style={{ fontWeight: 500 }}>{v}</span>
+          </div>
+        ))}
+
+        {/* Late fee */}
+        {data.late_fee > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px dashed #ddd', fontSize: 12 }}>
+            <span style={{ color: '#c53030' }}>Late Fee (penalty)</span>
+            <span style={{ fontWeight: 600, color: '#c53030' }}>{formatCurrency(data.late_fee)}</span>
+          </div>
+        )}
+
+        {/* Total */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #1a1a1a', marginTop: 8, fontSize: 14 }}>
+          <span style={{ fontWeight: 700 }}>Amount Paid</span>
+          <span style={{ fontWeight: 700, color: '#276749' }}>{formatCurrency(data.amount_paid)}</span>
+        </div>
+
+        {/* Balance */}
+        {balance > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12 }}>
+            <span style={{ color: '#c53030', fontWeight: 600 }}>Balance Due</span>
+            <span style={{ color: '#c53030', fontWeight: 600 }}>{formatCurrency(balance)}</span>
+          </div>
+        )}
+
+        {/* Stamp */}
+        <div style={{ marginTop: 28, textAlign: 'right' }}>
+          <div style={{ display: 'inline-block', borderTop: '1px solid #555', paddingTop: 4, width: 130, textAlign: 'center', fontSize: 10, color: '#555' }}>
+            <div style={{ fontWeight: 600, fontSize: 11 }}>{data.staff_name}</div>
+            <div>Authorised Signatory</div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ marginTop: 18, borderTop: '1px solid #ddd', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#aaa' }}>
+          <span>Generated: {generated}</span>
+          <span>Computer-generated receipt</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ReceiptsPage() {
   const supabase = createClient()
-  const [receipts, setReceipts] = useState<Record<string, unknown>[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo]     = useState('')
-  const [section, setSection]   = useState('')
-  const [schoolName, setSchoolName]     = useState('My School')
+  const [receipts, setReceipts]   = useState<Record<string, unknown>[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [search, setSearch]       = useState('')
+  const [dateFrom, setDateFrom]   = useState('')
+  const [dateTo, setDateTo]       = useState('')
+  const [section, setSection]     = useState('')
+  const [schoolName, setSchoolName]       = useState('My School')
   const [receiptPrefix, setReceiptPrefix] = useState('RCP')
+  const [printData, setPrintData] = useState<ReceiptData | null>(null)
 
-  // Load school name + prefix from settings once
   useEffect(() => {
     supabase
       .from('app_settings')
@@ -65,11 +186,11 @@ export default function ReceiptsPage() {
   useEffect(() => { load() }, [load])
 
   function buildReceiptData(r: Record<string, unknown>): ReceiptData {
-    const student  = r.students  as Record<string, string> | null
-    const fs       = r.fee_structures as Record<string, string> | null
-    const staff    = r.user_profiles  as Record<string, string> | null
+    const student = r.students        as Record<string, string> | null
+    const fs      = r.fee_structures  as Record<string, string> | null
+    const staff   = r.user_profiles   as Record<string, string> | null
     return {
-      receipt_no:     r.receipt_no as number,
+      receipt_no:     r.receipt_no    as number,
       student_name:   student?.full_name   ?? '—',
       student_id:     student?.student_id  ?? '—',
       class_grade:    student?.class_grade ?? '—',
@@ -88,142 +209,116 @@ export default function ReceiptsPage() {
     }
   }
 
-  function handlePrint(r: Record<string, unknown>) {
-    const d = buildReceiptData(r)
-    const balance = Math.max(0, d.amount_due - d.amount_paid)
-    const win = window.open('', '_blank', 'width=400,height=650')
-    if (!win) return
-    win.document.write(`
-      <!DOCTYPE html><html>
-      <head><title>Receipt #${d.receipt_no}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 20px; max-width: 380px; margin: 0 auto; }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 16px; }
-        .school-name { font-size: 18px; font-weight: bold; }
-        .receipt-title { font-size: 13px; color: #666; margin-top: 4px; }
-        .receipt-no { font-size: 12px; color: #666; text-align: right; margin-bottom: 8px; }
-        .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px dashed #eee; }
-        .row:last-child { border: none; }
-        .label { color: #555; } .value { font-weight: 500; }
-        .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; font-weight: bold; border-top: 2px solid #333; margin-top: 8px; }
-        .late-fee { color: #e53e3e; }
-        .footer { margin-top: 20px; text-align: center; font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 10px; }
-        @media print { body { padding: 0; } }
-      </style></head><body>
-      <div class="header">
-        <div class="school-name">${d.school_name}</div>
-        <div class="receipt-title">Fee Payment Receipt</div>
-      </div>
-      <div class="receipt-no">Receipt No: <strong>${d.receipt_prefix}-${d.receipt_no}</strong></div>
-      <div class="row"><span class="label">Student Name</span><span class="value">${d.student_name}</span></div>
-      <div class="row"><span class="label">Student ID</span><span class="value">${d.student_id}</span></div>
-      <div class="row"><span class="label">Class</span><span class="value">Class ${d.class_grade}</span></div>
-      <div class="row"><span class="label">Section</span><span class="value" style="text-transform:capitalize">${d.section_type}</span></div>
-      <div class="row"><span class="label">Fee Head</span><span class="value">${d.fee_head}</span></div>
-      <div class="row"><span class="label">Payment Date</span><span class="value">${d.payment_date ? new Date(d.payment_date).toLocaleDateString('en-IN') : '—'}</span></div>
-      <div class="row"><span class="label">Payment Mode</span><span class="value" style="text-transform:capitalize">${d.payment_mode ?? '—'}</span></div>
-      ${d.cheque_no ? `<div class="row"><span class="label">Cheque No.</span><span class="value">${d.cheque_no}</span></div>` : ''}
-      ${d.utr_ref   ? `<div class="row"><span class="label">UTR / Ref</span><span class="value">${d.utr_ref}</span></div>` : ''}
-      <div class="row"><span class="label">Amount Due</span><span class="value">₹${d.amount_due.toLocaleString('en-IN')}</span></div>
-      ${d.late_fee > 0 ? `<div class="row"><span class="label late-fee">Late Fee</span><span class="value late-fee">₹${d.late_fee.toLocaleString('en-IN')}</span></div>` : ''}
-      <div class="total-row"><span>Amount Paid</span><span>₹${d.amount_paid.toLocaleString('en-IN')}</span></div>
-      ${balance > 0 ? `<div class="row"><span class="label" style="color:#e53e3e">Balance Due</span><span class="value" style="color:#e53e3e">₹${balance.toLocaleString('en-IN')}</span></div>` : ''}
-      <div class="footer">Received by: <strong>${d.staff_name}</strong><br/>Generated: ${new Date().toLocaleString('en-IN')}</div>
-      <script>window.onload = () => window.print()</script>
-      </body></html>
-    `)
-    win.document.close()
-  }
-
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Receipts</h1>
-          <p className="page-subtitle">{receipts.length} receipt{receipts.length !== 1 ? 's' : ''} found</p>
-        </div>
-      </div>
+    <>
+      {/* Print styles — only #print-receipt shows when printing */}
+      <style>{`
+        @media print {
+          body > * { visibility: hidden !important; }
+          #print-receipt, #print-receipt * { visibility: visible !important; }
+          #print-receipt {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100% !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          .no-print { display: none !important; }
+        }
+      `}</style>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div className="search-bar" style={{ flex: 1, minWidth: 200 }}>
-          <Search size={15} color="var(--text-muted)" />
-          <input placeholder="Search student or receipt #…" value={search} onChange={e => setSearch(e.target.value)} />
-          {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}><X size={14} /></button>}
-        </div>
-        <select className="select" style={{ width: 140 }} value={section} onChange={e => setSection(e.target.value)}>
-          <option value="">All Sections</option>
-          <option value="school">School</option>
-          <option value="hostel">Hostel</option>
-          <option value="extracurricular">Extracurricular</option>
-        </select>
-        <input type="date" className="input" style={{ width: 150 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-        <input type="date" className="input" style={{ width: 150 }} value={dateTo}   onChange={e => setDateTo(e.target.value)} />
-        {(dateFrom || dateTo) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setDateFrom(''); setDateTo('') }}><X size={13} /> Clear dates</button>
-        )}
-      </div>
+      {printData && <PrintReceipt data={printData} onClose={() => setPrintData(null)} />}
 
-      <div className="table-wrapper">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Receipt #</th>
-              <th>Student</th>
-              <th>Section</th>
-              <th>Fee Head</th>
-              <th>Amount Paid</th>
-              <th>Late Fee</th>
-              <th>Balance</th>
-              <th>Date</th>
-              <th>Mode</th>
-              <th>Received By</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={11}><div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" style={{ width: 28, height: 28 }} /></div></td></tr>
-            ) : receipts.length === 0 ? (
-              <tr><td colSpan={11}><div className="empty-state"><Receipt size={40} /><p>No receipts found</p></div></td></tr>
-            ) : receipts.map(r => {
-              const student = r.students  as Record<string, string> | null
-              const fs      = r.fee_structures as Record<string, string> | null
-              const staff   = r.user_profiles  as Record<string, string> | null
-              const balance = Math.max(0, Number(r.amount_due) - Number(r.amount_paid))
-              return (
-                <tr key={r.id as string}>
-                  <td><span style={{ color: 'var(--accent)', fontWeight: 600 }}>#{r.receipt_no as number}</span></td>
-                  <td>
-                    <div className="text-primary">{student?.full_name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Class {student?.class_grade}</div>
-                  </td>
-                  <td><span className="badge badge-accent" style={{ textTransform: 'capitalize' }}>{r.section_type as string}</span></td>
-                  <td>{fs?.name}</td>
-                  <td style={{ color: 'var(--green)', fontWeight: 600 }}>{formatCurrency(Number(r.amount_paid))}</td>
-                  <td style={{ color: Number(r.late_fee) > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
-                    {Number(r.late_fee) > 0 ? formatCurrency(Number(r.late_fee)) : '—'}
-                  </td>
-                  <td style={{ color: balance > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>
-                    {balance > 0 ? formatCurrency(balance) : '—'}
-                  </td>
-                  <td>{r.payment_date ? new Date(r.payment_date as string).toLocaleDateString('en-IN') : '—'}</td>
-                  <td style={{ textTransform: 'capitalize', fontSize: 12 }}>{r.payment_mode as string ?? '—'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{staff?.full_name ?? 'Staff'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handlePrint(r)} title="Print">
-                        <Printer size={13} />
+      <div>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Receipts</h1>
+            <p className="page-subtitle">{receipts.length} receipt{receipts.length !== 1 ? 's' : ''} found</p>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div className="search-bar" style={{ flex: 1, minWidth: 200 }}>
+            <Search size={15} color="var(--text-muted)" />
+            <input placeholder="Search student or receipt #…" value={search} onChange={e => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}><X size={14} /></button>}
+          </div>
+          <select className="select" style={{ width: 140 }} value={section} onChange={e => setSection(e.target.value)}>
+            <option value="">All Sections</option>
+            <option value="school">School</option>
+            <option value="hostel">Hostel</option>
+            <option value="extracurricular">Extracurricular</option>
+          </select>
+          <input type="date" className="input" style={{ width: 150 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          <input type="date" className="input" style={{ width: 150 }} value={dateTo}   onChange={e => setDateTo(e.target.value)} />
+          {(dateFrom || dateTo) && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setDateFrom(''); setDateTo('') }}><X size={13} /> Clear dates</button>
+          )}
+        </div>
+
+        <div className="table-wrapper">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Receipt #</th>
+                <th>Student</th>
+                <th>Section</th>
+                <th>Fee Head</th>
+                <th>Amount Paid</th>
+                <th>Late Fee</th>
+                <th>Balance</th>
+                <th>Date</th>
+                <th>Mode</th>
+                <th>Received By</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={11}><div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" style={{ width: 28, height: 28 }} /></div></td></tr>
+              ) : receipts.length === 0 ? (
+                <tr><td colSpan={11}><div className="empty-state"><Receipt size={40} /><p>No receipts found</p><p style={{ fontSize: 12 }}>Record a payment in School Fees or Hostel Fees first</p></div></td></tr>
+              ) : receipts.map(r => {
+                const student = r.students       as Record<string, string> | null
+                const fs      = r.fee_structures as Record<string, string> | null
+                const staff   = r.user_profiles  as Record<string, string> | null
+                const balance = Math.max(0, Number(r.amount_due) - Number(r.amount_paid))
+                return (
+                  <tr key={r.id as string}>
+                    <td><span style={{ fontWeight: 600 }}>#{r.receipt_no as number}</span></td>
+                    <td>
+                      <div className="text-primary">{student?.full_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Class {student?.class_grade}</div>
+                    </td>
+                    <td><span className="badge badge-accent" style={{ textTransform: 'capitalize' }}>{r.section_type as string}</span></td>
+                    <td>{fs?.name}</td>
+                    <td style={{ color: 'var(--green)', fontWeight: 600 }}>{formatCurrency(Number(r.amount_paid))}</td>
+                    <td style={{ color: Number(r.late_fee) > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                      {Number(r.late_fee) > 0 ? formatCurrency(Number(r.late_fee)) : '—'}
+                    </td>
+                    <td style={{ color: balance > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>
+                      {balance > 0 ? formatCurrency(balance) : '—'}
+                    </td>
+                    <td>{r.payment_date ? new Date(r.payment_date as string).toLocaleDateString('en-IN') : '—'}</td>
+                    <td style={{ textTransform: 'capitalize', fontSize: 12 }}>{r.payment_mode as string ?? '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{staff?.full_name ?? 'Staff'}</td>
+                    <td>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setPrintData(buildReceiptData(r))}
+                        title="Print Receipt"
+                      >
+                        <Printer size={13} /> Print
                       </button>
-                      <PDFDownloadButton data={buildReceiptData(r)} />
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
