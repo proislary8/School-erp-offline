@@ -53,12 +53,12 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
           <div style={{
-            width: '56px', height: '56px',
-            background: 'linear-gradient(135deg, var(--accent), #818cf8)',
-            borderRadius: '16px',
+            width: '44px', height: '44px',
+            background: '#1c1c1c',
+            border: '1px solid #383838',
+            borderRadius: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 16px',
-            boxShadow: '0 8px 32px rgba(99,102,241,0.4)',
           }}>
             <GraduationCap size={28} color="white" />
           </div>
